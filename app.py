@@ -1,8 +1,22 @@
 import streamlit as st
+
+# Set page config at the very top (required for Streamlit Cloud)
+try:
+    st.set_page_config(
+        page_title="Resume Tailor",
+        page_icon="📄",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+except Exception as e:
+    # This might happen if set_page_config was already called in the utils module
+    st.error(f"Error setting page config: {str(e)}")
+
 import os
 import logging
 import json
 import time
+<<<<<<< HEAD
 
 # Safely load environment variables (skip if file missing on Streamlit Cloud)
 try:
@@ -19,6 +33,24 @@ from resume_tailorer import get_full_resume_analysis_with_model
 from utils import (
     validate_inputs, set_page_config, sanitize_input, extract_text_from_pdf, validate_uploaded_file
 )
+=======
+import traceback
+from dotenv import load_dotenv
+
+# Protect imports with try-except to help diagnose Streamlit Cloud issues
+try:
+    from resume_tailorer import generate_tailored_resume, generate_match_score, generate_resume_analysis, get_full_resume_analysis_with_model
+    from utils import validate_inputs, set_page_config, sanitize_input, extract_text_from_pdf, validate_uploaded_file
+except Exception as e:
+    st.error(f"Error importing modules: {str(e)}")
+    st.code(traceback.format_exc())
+
+# Load environment variables from .env file (safely)
+try:
+    load_dotenv()
+except Exception as e:
+    st.warning(f"Note: .env file not loaded, using environment variables directly: {str(e)}")
+>>>>>>> a350779 (Fix Streamlit Cloud deployment errors by improving app startup and error handling.)
 
 # Configure logging
 logging.basicConfig(
@@ -75,6 +107,13 @@ def render_resume_analysis(analysis):
             st.markdown(f"💡 {tip}")
 
 def main():
+<<<<<<< HEAD
+=======
+    # Page configuration is already set at the top of the file
+    # No need to call set_page_config() here
+    
+    # App title and description
+>>>>>>> a350779 (Fix Streamlit Cloud deployment errors by improving app startup and error handling.)
     st.title("AI Resume Tailor Pro")
     st.markdown("### The Ultimate AI-Powered Resume Customization Tool")
 
@@ -207,5 +246,36 @@ def main():
         - Apply with confidence 🚀
         """)
 
+# Debug section for Streamlit Cloud deployment
+# Note: st.set_page_config is already called at the very top of the file
+
+# Create a small debug section that can be used during deployment issues
+if 'debug' in st.query_params:
+    with st.expander("Debug information", expanded=True):
+        st.write("Debugging mode active")
+        st.write(f"Streamlit version: {st.__version__}")
+        st.write(f"Current working directory: {os.getcwd()}")
+        st.write(f"Files in current directory: {os.listdir('.')}")
+        
+        try:
+            st.write("Dependencies successfully imported")
+        except Exception as e:
+            st.error(f"Import error: {str(e)}")
+            st.code(traceback.format_exc())
+
+# Call the main function inside a try/except to catch any startup errors
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
+        st.code(traceback.format_exc())
+        st.info("Please report this error to the development team.")
+else:
+    # This ensures something is displayed when imported (for Streamlit Cloud health checks)
+    try:
+        main()
+    except Exception as e:
+        st.title("Resume Tailor App")
+        st.error(f"Error during module import: {str(e)}")
+        st.info("Try refreshing the page or contact support if the issue persists.")
