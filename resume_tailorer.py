@@ -7,7 +7,8 @@ import anthropic
 from typing import Dict, List, Tuple, Any, Optional, Union, Literal
 from langchain.prompts import PromptTemplate, ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain.chains import LLMChain, SequentialChain
-from langchain.chat_models import ChatOpenAI
+# Remove duplicate import - using the community version is the correct approach
+# from langchain.chat_models import ChatOpenAI
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from langchain_community.chat_models import ChatOpenAI
