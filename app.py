@@ -5,7 +5,7 @@ import json
 import time
 from dotenv import load_dotenv
 from resume_tailorer import generate_tailored_resume, generate_match_score, generate_resume_analysis, get_full_resume_analysis
-from utils import validate_inputs, set_page_config, sanitize_input
+from utils import validate_inputs, set_page_config, sanitize_input, extract_text_from_pdf, validate_uploaded_file
 
 # Load environment variables from .env file
 load_dotenv()
@@ -97,7 +97,7 @@ def main():
         st.image("https://img.icons8.com/fluency/96/resume.png", width=80)
         st.markdown("## How it works")
         st.markdown("""
-        1. **Paste your resume** and the job description
+        1. **Upload or paste your resume** and the job description
         2. **Get an ATS-optimized resume** tailored specifically for the job
         3. **See your match score** and detailed analysis
         4. **Apply with confidence** knowing your resume is optimized
@@ -119,18 +119,60 @@ def main():
     # Create tabs for different sections
     input_tab, results_tab = st.tabs(["✏️ Input Your Information", "🚀 View Results"])
     
+    # Initialize session state for resume_text
+    if 'resume_text' not in st.session_state:
+        st.session_state.resume_text = ""
+    
     with input_tab:
         # Input sections
         col1, col2 = st.columns([1, 1])
         
         with col1:
             st.subheader("Your Current Resume")
-            resume_text = st.text_area(
-                "Paste your current resume here",
-                height=300,
-                placeholder="Paste your full resume text here...",
-                help="Include your skills, experience, education, and other relevant information."
-            )
+            
+            # Create tabs for PDF upload and text input
+            resume_tabs = st.tabs(["📄 Upload PDF", "✏️ Paste Text"])
+            
+            with resume_tabs[0]:
+                # PDF upload option
+                resume_file = st.file_uploader(
+                    "Upload your resume (PDF only, max 2MB)",
+                    type=["pdf"],
+                    help="We'll extract the text from your PDF resume automatically."
+                )
+                
+                if resume_file is not None:
+                    # Validate the uploaded file
+                    is_valid, error_message = validate_uploaded_file(resume_file)
+                    
+                    if not is_valid:
+                        st.error(error_message)
+                    else:
+                        # Extract text from PDF
+                        extracted_text = extract_text_from_pdf(resume_file)
+                        
+                        if extracted_text:
+                            st.success("Resume uploaded and text extracted successfully!")
+                            st.session_state.resume_text = extracted_text
+                            st.markdown("### Preview:")
+                            with st.expander("Show extracted text"):
+                                st.text(extracted_text)
+                        else:
+                            st.error("Could not extract text from the PDF. Please try pasting your resume text directly.")
+            
+            with resume_tabs[1]:
+                # Text input option
+                resume_text_input = st.text_area(
+                    "Paste your current resume here",
+                    value=st.session_state.resume_text,
+                    height=300,
+                    placeholder="Paste your full resume text here...",
+                    help="Include your skills, experience, education, and other relevant information."
+                )
+                
+                # Update session state if text area changed
+                if resume_text_input != st.session_state.resume_text:
+                    st.session_state.resume_text = resume_text_input
         
         with col2:
             st.subheader("Job Description")
@@ -157,6 +199,9 @@ def main():
             generate_button = st.button("Generate Analysis", type="primary")
             
         if generate_button:
+            # Get resume_text from session state
+            resume_text = st.session_state.resume_text
+            
             # Validate inputs
             if not validate_inputs(resume_text, job_description):
                 st.error("Please provide both your resume and the job description.")
@@ -221,7 +266,7 @@ def main():
             st.markdown(st.session_state.tailored_resume)
             
             # Download options
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.download_button(
                     label="Download as Markdown (.md)",
@@ -238,6 +283,13 @@ def main():
                     file_name="tailored_resume.txt",
                     mime="text/plain"
                 )
+            with col3:
+                # Add option to copy to clipboard
+                st.button("Copy to Clipboard", 
+                          help="Click to copy the tailored resume to your clipboard",
+                          on_click=lambda: st.write('<script>navigator.clipboard.writeText(`' + 
+                                                  st.session_state.tailored_resume.replace('`', '\\`') + 
+                                                  '`);</script>', unsafe_allow_html=True))
         
         # Match Score Analysis
         if 'run_match_score' in st.session_state and st.session_state.run_match_score:
