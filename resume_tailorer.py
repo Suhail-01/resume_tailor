@@ -119,18 +119,28 @@ def get_model(model_choice: str = "auto", temperature: float = 0.7, max_tokens: 
     Initialize and return the appropriate language model based on availability.
     
     Args:
-        model_choice (str): The model to use ('openai', 'anthropic', or 'auto')
+        model_choice (str): The model to use ('openai', 'anthropic', 'free', or 'auto')
         temperature (float): Controls randomness in output (0.0 to 1.0)
         max_tokens (int): Maximum number of tokens to generate
     
     Returns:
         Optional[BaseLanguageModel]: Configured language model or None if using direct API
     """
+    # Check if model_choice is being overridden by environment
+    env_model = os.getenv("RESUME_TAILORER_MODEL")
+    if env_model:
+        logger.info(f"Using model from environment: {env_model}")
+        model_choice = env_model
+    
     # Check OpenAI API key
     openai_api_key = os.getenv("OPENAI_API_KEY")
     
     # Check Anthropic API key
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+    
+    # Log available API keys (without showing the actual keys)
+    logger.info(f"OpenAI API key available: {bool(openai_api_key)}")
+    logger.info(f"Anthropic API key available: {bool(anthropic_api_key)}")
     
     # If model_choice is auto, try to determine the best one
     if model_choice == "auto":
@@ -140,6 +150,7 @@ def get_model(model_choice: str = "auto", temperature: float = 0.7, max_tokens: 
             model_choice = "anthropic"
         else:
             model_choice = "free"
+        logger.info(f"Auto-selected model: {model_choice}")
     
     # Initialize appropriate model
     if model_choice == "openai" and openai_api_key:
@@ -158,10 +169,13 @@ def get_model(model_choice: str = "auto", temperature: float = 0.7, max_tokens: 
             # If OpenAI fails, try Anthropic if available
             if anthropic_api_key:
                 model_choice = "anthropic"
+                logger.info("Falling back to Anthropic model")
             else:
                 model_choice = "free"
+                logger.info("Falling back to free model")
     
     # For now, we'll use direct API calls for Anthropic and free models
+    logger.info(f"Using direct API call with model: {model_choice}")
     # Return None to signal using direct API calls
     return None
 
@@ -333,7 +347,7 @@ def generate_match_score(resume_text: str, job_description: str) -> MatchScore:
         
         # Try to get a language model
         try:
-            llm = get_model(model_choice="auto", temperature=0.2, max_tokens=1000)
+            llm = get_model(temperature=0.2, max_tokens=1000)  # Will use environment model choice
         except:
             llm = None
         
@@ -417,7 +431,10 @@ def generate_resume_analysis(resume_text: str, job_description: str) -> ResumeAn
         logger.info("Generating detailed resume analysis")
         
         # Try to get a language model
-        llm = get_model(model_choice="auto", temperature=0.3, max_tokens=1000)
+        try:
+            llm = get_model(temperature=0.3, max_tokens=1000)  # Will use environment model choice
+        except:
+            llm = None
         
         # Get the prompts
         analysis_prompt = create_resume_analysis_prompt()
@@ -499,7 +516,10 @@ def generate_tailored_resume(resume_text: str, job_description: str) -> str:
         logger.info("Initializing language model for resume tailoring")
         
         # Try to get a language model
-        llm = get_model(model_choice="auto", temperature=0.5, max_tokens=1800)
+        try:
+            llm = get_model(temperature=0.5, max_tokens=1800)  # Will use environment model choice
+        except:
+            llm = None
         
         # Get the prompts
         prompt_template = create_resume_tailoring_prompt()
@@ -538,6 +558,104 @@ Here's a simple version based on your original resume:
 Please try again later or provide API credentials for better results.
 """
 
+def generate_tailored_resume_with_model(resume_text: str, job_description: str, model_choice: str = "auto") -> str:
+    """
+    Generate a tailored resume using the specified model.
+    
+    Args:
+        resume_text (str): The original resume text
+        job_description (str): The job description
+        model_choice (str): Which model to use ("auto", "openai", "anthropic", or "free")
+        
+    Returns:
+        str: The tailored resume
+    """
+    try:
+        logger.info(f"Generating tailored resume using model: {model_choice}")
+        
+        # Set environment variable for model choice
+        os.environ["RESUME_TAILORER_MODEL"] = model_choice
+        
+        # Call the regular function (it will use the model choice from environment)
+        return generate_tailored_resume(resume_text, job_description)
+        
+    except Exception as e:
+        logger.error(f"Error in generate_tailored_resume_with_model: {str(e)}")
+        return f"""
+# Tailored Resume
+
+## Professional Summary
+I'm sorry, but I couldn't generate a fully tailored resume due to API limitations. 
+Here's a simple version based on your original resume:
+
+{resume_text[:500] + "..." if len(resume_text) > 500 else resume_text}
+
+## Next Steps
+Please try again later or provide API credentials for better results.
+"""
+
+def generate_match_score_with_model(resume_text: str, job_description: str, model_choice: str = "auto") -> MatchScore:
+    """
+    Generate a match score using the specified model.
+    
+    Args:
+        resume_text (str): The original resume text
+        job_description (str): The job description
+        model_choice (str): Which model to use ("auto", "openai", "anthropic", or "free")
+        
+    Returns:
+        MatchScore: The match score analysis
+    """
+    try:
+        logger.info(f"Generating match score using model: {model_choice}")
+        
+        # Set environment variable for model choice
+        os.environ["RESUME_TAILORER_MODEL"] = model_choice
+        
+        # Call the regular function (it will use the model choice from environment)
+        return generate_match_score(resume_text, job_description)
+        
+    except Exception as e:
+        logger.error(f"Error in generate_match_score_with_model: {str(e)}")
+        # Return a default match score as fallback
+        return MatchScore(
+            percentage=50,
+            matched_skills=["Unable to analyze skills accurately"],
+            missing_skills=["Unable to analyze missing skills"],
+            keyword_matches={"error": 1}
+        )
+
+def generate_resume_analysis_with_model(resume_text: str, job_description: str, model_choice: str = "auto") -> ResumeAnalysis:
+    """
+    Generate a resume analysis using the specified model.
+    
+    Args:
+        resume_text (str): The original resume text
+        job_description (str): The job description
+        model_choice (str): Which model to use ("auto", "openai", "anthropic", or "free")
+        
+    Returns:
+        ResumeAnalysis: The resume analysis
+    """
+    try:
+        logger.info(f"Generating resume analysis using model: {model_choice}")
+        
+        # Set environment variable for model choice
+        os.environ["RESUME_TAILORER_MODEL"] = model_choice
+        
+        # Call the regular function (it will use the model choice from environment)
+        return generate_resume_analysis(resume_text, job_description)
+        
+    except Exception as e:
+        logger.error(f"Error in generate_resume_analysis_with_model: {str(e)}")
+        # Return a default analysis as fallback
+        return ResumeAnalysis(
+            strengths=["Your resume contains relevant experience"],
+            improvement_areas=["Consider highlighting your skills more clearly"],
+            keyword_recommendations=["job-specific keywords"],
+            ats_optimization_tips=["Use standard section headings"]
+        )
+
 def get_full_resume_analysis(resume_text: str, job_description: str) -> Tuple[str, MatchScore, ResumeAnalysis]:
     """
     Perform complete resume analysis and tailoring.
@@ -549,14 +667,56 @@ def get_full_resume_analysis(resume_text: str, job_description: str) -> Tuple[st
     Returns:
         Tuple[str, MatchScore, ResumeAnalysis]: Tailored resume, match score, and analysis
     """
+    return get_full_resume_analysis_with_model(resume_text, job_description, "auto")
+
+def get_full_resume_analysis_with_model(resume_text: str, job_description: str, model_choice: str = "auto") -> Tuple[str, MatchScore, ResumeAnalysis]:
+    """
+    Perform complete resume analysis and tailoring with the specified model.
+    
+    Args:
+        resume_text (str): The original resume text
+        job_description (str): The job description
+        model_choice (str): Which model to use ("auto", "openai", "anthropic", or "free")
+        
+    Returns:
+        Tuple[str, MatchScore, ResumeAnalysis]: Tailored resume, match score, and analysis
+    """
     try:
-        # Generate all components in parallel (in a real-world scenario, these could be parallelized)
-        tailored_resume = generate_tailored_resume(resume_text, job_description)
-        match_score = generate_match_score(resume_text, job_description)
-        resume_analysis = generate_resume_analysis(resume_text, job_description)
+        logger.info(f"Performing full resume analysis using model: {model_choice}")
+        
+        # Generate all components with the specified model
+        tailored_resume = generate_tailored_resume_with_model(resume_text, job_description, model_choice)
+        match_score = generate_match_score_with_model(resume_text, job_description, model_choice)
+        resume_analysis = generate_resume_analysis_with_model(resume_text, job_description, model_choice)
         
         return tailored_resume, match_score, resume_analysis
         
     except Exception as e:
-        logger.error(f"Error in get_full_resume_analysis: {str(e)}")
-        raise Exception(f"Failed to complete resume analysis: {str(e)}")
+        logger.error(f"Error in get_full_resume_analysis_with_model: {str(e)}")
+        # Create fallback responses
+        tailored_resume = f"""
+# Tailored Resume
+
+## Professional Summary
+I'm sorry, but I couldn't generate a fully tailored resume due to API limitations. 
+Here's a simple version based on your original resume:
+
+{resume_text[:500] + "..." if len(resume_text) > 500 else resume_text}
+
+## Next Steps
+Please try again later or provide API credentials for better results.
+"""
+        match_score = MatchScore(
+            percentage=50,
+            matched_skills=["Unable to analyze skills accurately"],
+            missing_skills=["Unable to analyze missing skills"],
+            keyword_matches={"error": 1}
+        )
+        resume_analysis = ResumeAnalysis(
+            strengths=["Your resume contains relevant experience"],
+            improvement_areas=["Consider highlighting your skills more clearly"],
+            keyword_recommendations=["job-specific keywords"],
+            ats_optimization_tips=["Use standard section headings"]
+        )
+        
+        return tailored_resume, match_score, resume_analysis

@@ -194,6 +194,25 @@ def main():
                 default=["Tailored Resume", "Match Score Analysis", "Resume Improvement Suggestions"],
                 help="Select which analyses you want to receive"
             )
+            
+            # Model selection
+            model_choice = st.radio(
+                "Select AI Model (using free model if no API key available)",
+                options=["Auto-select", "OpenAI (requires API key)", "Anthropic Claude (requires API key)", "Free Model"],
+                index=0,
+                horizontal=True,
+                help="Select which AI model to use for analysis. 'Auto-select' will use the best available model."
+            )
+            
+            # Map radio options to model identifiers
+            model_mapping = {
+                "Auto-select": "auto",
+                "OpenAI (requires API key)": "openai",
+                "Anthropic Claude (requires API key)": "anthropic",
+                "Free Model": "free"
+            }
+            
+            selected_model = model_mapping[model_choice]
         
         with col2:
             generate_button = st.button("Generate Analysis", type="primary")
@@ -211,12 +230,24 @@ def main():
             resume_text = sanitize_input(resume_text)
             job_description = sanitize_input(job_description)
             
-            # Check if OpenAI API key is available
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                st.error("OpenAI API key not found. Please provide your OpenAI API key.")
-                st.info("The API key is required to generate personalized resume analyses.")
-                return
+            # Check for API keys if not using free model
+            if selected_model != "free":
+                if selected_model == "openai" or selected_model == "auto":
+                    openai_api_key = os.getenv("OPENAI_API_KEY")
+                    if not openai_api_key and selected_model == "openai":
+                        st.warning("OpenAI API key not found. Switching to free model.")
+                        selected_model = "free"
+                
+                if selected_model == "anthropic":
+                    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+                    if not anthropic_api_key:
+                        st.warning("Anthropic API key not found. Switching to free model.")
+                        selected_model = "free"
+                
+                # If auto was selected but no API keys are available, use free model
+                if selected_model == "auto" and not openai_api_key and not os.getenv("ANTHROPIC_API_KEY"):
+                    st.info("No API keys found. Using the free model option.")
+                    selected_model = "free"
                 
             # Process and analyze
             with st.spinner("Analyzing your resume and the job description... (this may take a minute)"):
@@ -231,9 +262,23 @@ def main():
                     if "Resume Improvement Suggestions" in analysis_options:
                         st.session_state.run_resume_analysis = True
                     
-                    # Run the full analysis
-                    tailored_resume, match_score, resume_analysis = get_full_resume_analysis(
-                        resume_text, job_description
+                    # Display model info to user
+                    if selected_model == "free":
+                        st.info("Using free model for analysis. For better results, provide an API key.")
+                    elif selected_model == "openai":
+                        st.info("Using OpenAI GPT model for analysis.")
+                    elif selected_model == "anthropic":
+                        st.info("Using Anthropic Claude model for analysis.")
+                    else:  # auto
+                        st.info("Using best available model for analysis.")
+                    
+                    # Add model info to session state
+                    st.session_state.model_used = selected_model
+                    
+                    # Run the full analysis with the selected model
+                    from resume_tailorer import get_full_resume_analysis_with_model
+                    tailored_resume, match_score, resume_analysis = get_full_resume_analysis_with_model(
+                        resume_text, job_description, selected_model
                     )
                     
                     # Store results in session state
