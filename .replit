@@ -17,10 +17,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Quick Game Server"
+args = "Resume Tailor App"
 
 [[workflows.workflow]]
-name = "Quick Game Server"
+name = "Resume Tailor App"
 author = "agent"
 
 [workflows.workflow.metadata]
@@ -31,7 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "streamlit run quick_game.py --server.port 5000"
+args = "streamlit run app.py --server.port 5000"
 waitForPort = 5000
 
 [[ports]]

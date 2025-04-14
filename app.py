@@ -1,9 +1,11 @@
 import streamlit as st
 import os
 import logging
+import json
+import time
 from dotenv import load_dotenv
-from resume_tailorer import generate_tailored_resume
-from utils import validate_inputs, set_page_config
+from resume_tailorer import generate_tailored_resume, generate_match_score, generate_resume_analysis, get_full_resume_analysis
+from utils import validate_inputs, set_page_config, sanitize_input
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,100 +17,247 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def render_match_score(match_score):
+    """Render match score analysis in the UI"""
+    st.subheader("📊 Job Match Analysis")
+    
+    # Match percentage gauge visualization
+    st.markdown(f"#### Match Score: {match_score.percentage}%")
+    st.progress(match_score.percentage/100)
+    
+    # Skills analysis
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("##### 🎯 Matching Skills")
+        for skill in match_score.matched_skills:
+            st.markdown(f"✅ {skill}")
+    
+    with col2:
+        st.markdown("##### 🔍 Missing Skills")
+        for skill in match_score.missing_skills:
+            st.markdown(f"❌ {skill}")
+    
+    # Keyword Analysis
+    st.markdown("##### 🔑 Keyword Matches")
+    
+    # Convert to list of tuples and sort by count (descending)
+    keywords = [(k, v) for k, v in match_score.keyword_matches.items()]
+    keywords.sort(key=lambda x: x[1], reverse=True)
+    
+    # Display as a horizontal bar chart
+    if keywords:
+        keywords_data = {
+            "Keywords": [k for k, v in keywords],
+            "Occurrences": [v for k, v in keywords]
+        }
+        st.bar_chart(keywords_data, x="Keywords", y="Occurrences", use_container_width=True)
+    else:
+        st.info("No keyword matches found.")
+
+def render_resume_analysis(resume_analysis):
+    """Render detailed resume analysis in the UI"""
+    st.subheader("📝 Resume Improvement Analysis")
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["Strengths", "Areas to Improve", "Recommended Keywords", "ATS Optimization"])
+    
+    with tab1:
+        st.markdown("#### 💪 Your Resume Strengths")
+        for strength in resume_analysis.strengths:
+            st.markdown(f"✅ {strength}")
+    
+    with tab2:
+        st.markdown("#### 🔨 Areas to Improve")
+        for area in resume_analysis.improvement_areas:
+            st.markdown(f"📌 {area}")
+    
+    with tab3:
+        st.markdown("#### 🔑 Recommended Keywords")
+        cols = st.columns(2)
+        for i, keyword in enumerate(resume_analysis.keyword_recommendations):
+            col_idx = i % 2
+            with cols[col_idx]:
+                st.markdown(f"🔹 {keyword}")
+    
+    with tab4:
+        st.markdown("#### 🤖 ATS Optimization Tips")
+        for tip in resume_analysis.ats_optimization_tips:
+            st.markdown(f"💡 {tip}")
+
 def main():
     # Set page configuration
     set_page_config()
     
     # App title and description
-    st.title("AI Resume Tailor")
-    st.subheader("Customize your resume for specific job descriptions")
+    st.title("AI Resume Tailor Pro")
+    st.markdown("### The Ultimate AI-Powered Resume Customization Tool")
     
-    st.markdown("""
-    ### How it works:
-    1. Paste your current resume
-    2. Enter the job description
-    3. Click 'Generate Tailored Resume'
-    4. Get a customized resume that highlights relevant skills and experience
-    """)
-    
-    # Input sections
-    with st.container():
-        st.subheader("Your Current Resume")
-        resume_text = st.text_area(
-            "Paste your current resume here",
-            height=300,
-            placeholder="Paste your full resume text here...",
-            help="Include your skills, experience, education, and other relevant information."
-        )
-    
-    with st.container():
-        st.subheader("Job Description")
-        job_description = st.text_area(
-            "Paste the job description here",
-            height=200,
-            placeholder="Paste the job description you're applying for...",
-            help="Include the full job posting with responsibilities, requirements, and company details."
-        )
-    
-    # Process inputs when button is clicked
-    if st.button("Generate Tailored Resume", type="primary"):
-        # Validate inputs
-        if not validate_inputs(resume_text, job_description):
-            st.error("Please provide both your resume and the job description.")
-            return
+    # Sidebar with info
+    with st.sidebar:
+        st.image("https://img.icons8.com/fluency/96/resume.png", width=80)
+        st.markdown("## How it works")
+        st.markdown("""
+        1. **Paste your resume** and the job description
+        2. **Get an ATS-optimized resume** tailored specifically for the job
+        3. **See your match score** and detailed analysis
+        4. **Apply with confidence** knowing your resume is optimized
         
-        # Check if OpenAI API key is available
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            st.error("OpenAI API key not found. Please set it in your .env file.")
+        Developed with advanced AI technologies:
+        - OpenAI GPT-4o
+        - LangChain
+        - ATS Optimization
+        """)
+        
+        st.markdown("---")
+        st.markdown("### 💼 Why this matters")
+        st.markdown("""
+        - **75%** of resumes are rejected by ATS before a human sees them
+        - Tailored resumes are **8x more likely** to get interviews
+        - Most recruiters spend **< 7 seconds** reviewing a resume
+        """)
+    
+    # Create tabs for different sections
+    input_tab, results_tab = st.tabs(["✏️ Input Your Information", "🚀 View Results"])
+    
+    with input_tab:
+        # Input sections
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.subheader("Your Current Resume")
+            resume_text = st.text_area(
+                "Paste your current resume here",
+                height=300,
+                placeholder="Paste your full resume text here...",
+                help="Include your skills, experience, education, and other relevant information."
+            )
+        
+        with col2:
+            st.subheader("Job Description")
+            job_description = st.text_area(
+                "Paste the job description here",
+                height=300,
+                placeholder="Paste the job description you're applying for...",
+                help="Include the full job posting with responsibilities, requirements, and company details."
+            )
+        
+        # Options and generate button
+        st.markdown("---")
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            analysis_options = st.multiselect(
+                "Analysis Options",
+                options=["Tailored Resume", "Match Score Analysis", "Resume Improvement Suggestions"],
+                default=["Tailored Resume", "Match Score Analysis", "Resume Improvement Suggestions"],
+                help="Select which analyses you want to receive"
+            )
+        
+        with col2:
+            generate_button = st.button("Generate Analysis", type="primary")
             
-            # Show sample response when API key is missing
-            st.warning("Since the OpenAI API key is missing, here's a sample response:")
-            st.subheader("Sample Tailored Resume")
+        if generate_button:
+            # Validate inputs
+            if not validate_inputs(resume_text, job_description):
+                st.error("Please provide both your resume and the job description.")
+                return
             
-            st.markdown("""
-            ### Professional Summary
-            *This is a sample response. Please add your OpenAI API key to get personalized results.*
+            # Sanitize inputs
+            resume_text = sanitize_input(resume_text)
+            job_description = sanitize_input(job_description)
             
-            Dedicated software developer with 5+ years of experience in web development. Proficient in JavaScript, Python, and cloud technologies, with a proven track record of delivering scalable solutions. Passionate about creating intuitive user experiences and optimizing application performance.
-            
-            ### Key Skills Aligned with Job Requirements
-            - JavaScript/TypeScript development
-            - React.js and modern frontend frameworks
-            - Python backend development
-            - Cloud infrastructure (AWS)
-            - Agile methodologies
-            
-            ### Tailored Experience Highlights
-            - Developed responsive web applications using React.js, improving user engagement by 40%
-            - Implemented CI/CD pipelines, reducing deployment time by 60%
-            - Collaborated with cross-functional teams to deliver projects on time and within budget
-            """)
+            # Check if OpenAI API key is available
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                st.error("OpenAI API key not found. Please provide your OpenAI API key.")
+                st.info("The API key is required to generate personalized resume analyses.")
+                return
+                
+            # Process and analyze
+            with st.spinner("Analyzing your resume and the job description... (this may take a minute)"):
+                try:
+                    # Save to session state for the results tab
+                    if "Tailored Resume" in analysis_options:
+                        st.session_state.run_tailored_resume = True
+                    
+                    if "Match Score Analysis" in analysis_options:
+                        st.session_state.run_match_score = True
+                    
+                    if "Resume Improvement Suggestions" in analysis_options:
+                        st.session_state.run_resume_analysis = True
+                    
+                    # Run the full analysis
+                    tailored_resume, match_score, resume_analysis = get_full_resume_analysis(
+                        resume_text, job_description
+                    )
+                    
+                    # Store results in session state
+                    st.session_state.tailored_resume = tailored_resume
+                    st.session_state.match_score = match_score
+                    st.session_state.resume_analysis = resume_analysis
+                    st.session_state.analysis_complete = True
+                    
+                    # Switch to results tab
+                    st.success("Analysis complete! Check the Results tab.")
+                    time.sleep(1)  # Give user time to see the success message
+                    
+                except Exception as e:
+                    logger.error(f"Error during analysis: {str(e)}")
+                    st.error(f"An error occurred while processing your request: {str(e)}")
+                    st.info("Please check your inputs and try again.")
+    
+    with results_tab:
+        if 'analysis_complete' not in st.session_state or not st.session_state.analysis_complete:
+            st.info("Please input your resume and job description in the Input tab, then click 'Generate Analysis'.")
             return
             
-        # Show progress indicator during processing
-        with st.spinner("Analyzing your resume and the job description..."):
-            try:
-                # Generate tailored resume
-                tailored_resume = generate_tailored_resume(resume_text, job_description)
-                
-                # Display results
-                st.success("Successfully tailored your resume!")
-                st.subheader("Your Tailored Resume")
-                st.markdown(tailored_resume)
-                
-                # Add download button for the tailored resume
+        # Display all results
+        st.subheader("🌟 Your Resume Analysis Results")
+        
+        # Tailored Resume section
+        if 'run_tailored_resume' in st.session_state and st.session_state.run_tailored_resume:
+            st.markdown("---")
+            st.subheader("✨ Your Tailored Resume")
+            st.markdown(st.session_state.tailored_resume)
+            
+            # Download options
+            col1, col2 = st.columns(2)
+            with col1:
                 st.download_button(
-                    label="Download Tailored Resume",
-                    data=tailored_resume,
+                    label="Download as Markdown (.md)",
+                    data=st.session_state.tailored_resume,
                     file_name="tailored_resume.md",
                     mime="text/markdown"
                 )
-                
-            except Exception as e:
-                logger.error(f"Error generating tailored resume: {str(e)}")
-                st.error(f"An error occurred while processing your request: {str(e)}")
-                st.info("Please check your inputs and try again.")
+            with col2:
+                # Add plain text version
+                plain_text = st.session_state.tailored_resume.replace('###', '').replace('##', '').replace('#', '')
+                st.download_button(
+                    label="Download as Text (.txt)",
+                    data=plain_text,
+                    file_name="tailored_resume.txt",
+                    mime="text/plain"
+                )
+        
+        # Match Score Analysis
+        if 'run_match_score' in st.session_state and st.session_state.run_match_score:
+            st.markdown("---")
+            render_match_score(st.session_state.match_score)
+        
+        # Resume Improvement Analysis
+        if 'run_resume_analysis' in st.session_state and st.session_state.run_resume_analysis:
+            st.markdown("---")
+            render_resume_analysis(st.session_state.resume_analysis)
+
+        # Tips for next steps
+        st.markdown("---")
+        st.subheader("📋 Next Steps")
+        st.markdown("""
+        1. **Review your tailored resume** and make any necessary manual adjustments
+        2. **Incorporate the suggested keywords** to further optimize for ATS
+        3. **Consider addressing the missing skills** in your resume or cover letter
+        4. **Apply with confidence** knowing your resume is optimized for this position
+        """)
 
 if __name__ == "__main__":
     main()
