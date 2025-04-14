@@ -109,6 +109,37 @@ def main():
         """)
         
         st.markdown("---")
+        
+        # API Key Configuration
+        with st.expander("🔑 API Key Settings"):
+            st.caption("Add your API keys for better results")
+            
+            # OpenAI Key Input
+            openai_key = st.text_input(
+                "OpenAI API Key", 
+                type="password",
+                placeholder="sk-...",
+                help="Enter your OpenAI API key for GPT-4o access"
+            )
+            
+            # Anthropic Key Input
+            anthropic_key = st.text_input(
+                "Anthropic API Key", 
+                type="password",
+                placeholder="sk-ant-...",
+                help="Enter your Anthropic API key for Claude access"
+            )
+            
+            # Set the API keys as environment variables if provided
+            if openai_key:
+                os.environ["OPENAI_API_KEY"] = openai_key
+                
+            if anthropic_key:
+                os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+            
+            st.caption("Your API keys are not stored and will be cleared when you refresh the page")
+        
+        st.markdown("---")
         st.markdown("### 💼 Why this matters")
         st.markdown("""
         - **75%** of resumes are rejected by ATS before a human sees them
